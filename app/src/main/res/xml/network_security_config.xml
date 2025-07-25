@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">soundhelix.com</domain>
+        <domain includeSubdomains="true">www.soundhelix.com</domain>
+        <domain includeSubdomains="true">commondatastorage.googleapis.com</domain>
+        <domain includeSubdomains="true">learningcontainer.com</domain>
+        <domain includeSubdomains="true">www.learningcontainer.com</domain>
+        <domain includeSubdomains="true">file-examples.com</domain>
+    </domain-config>
+</network-security-config>
