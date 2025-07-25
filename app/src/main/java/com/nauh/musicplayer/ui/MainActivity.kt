@@ -173,19 +173,27 @@ class MainActivity : AppCompatActivity(), MainContract.View {
     }
     
     override fun updateMiniPlayer(song: Song, isPlaying: Boolean, progress: Int) {
-        miniSongTitle.text = song.title
-        miniArtistName.text = song.artist
-        
-        val playPauseIcon = if (isPlaying) {
-            R.drawable.ic_pause
-        } else {
-            R.drawable.ic_play_arrow
+        // Ensure we're on the main thread
+        runOnUiThread {
+            miniSongTitle.text = song.title
+            miniArtistName.text = song.artist
+
+            val playPauseIcon = if (isPlaying) {
+                R.drawable.ic_pause
+            } else {
+                R.drawable.ic_play_arrow
+            }
+            miniPlayPauseButton.setImageResource(playPauseIcon)
+
+            miniProgressBar.progress = progress
+
+            // Update the adapter to show playing indicator
+            songAdapter.setCurrentPlayingSong(song.id)
+
+            // Ensure mini player is visible
+            if (miniPlayer.visibility != View.VISIBLE) {
+                miniPlayer.visibility = View.VISIBLE
+            }
         }
-        miniPlayPauseButton.setImageResource(playPauseIcon)
-        
-        miniProgressBar.progress = progress
-        
-        // Update the adapter to show playing indicator
-        songAdapter.setCurrentPlayingSong(song.id)
     }
 }

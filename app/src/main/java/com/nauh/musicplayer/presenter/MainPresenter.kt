@@ -87,6 +87,16 @@ class MainPresenter(
                     view?.updateMiniPlayer(song, service.isPlaying(), progress)
                 }
             }
+
+            // Initialize mini player with current state if music is already playing
+            service.getCurrentSong()?.let { song ->
+                val isPlaying = service.isPlaying()
+                val progress = if (service.getDuration() > 0) {
+                    ((service.getCurrentPosition().toFloat() / service.getDuration()) * 100).toInt()
+                } else 0
+                view?.showMiniPlayer(song)
+                view?.updateMiniPlayer(song, isPlaying, progress)
+            }
         }
     }
     
@@ -150,14 +160,47 @@ class MainPresenter(
     }
     
     override fun onPlayPauseClicked() {
-        musicService?.playPause()
+        musicService?.let { service ->
+            service.playPause()
+
+            // Immediately update UI to provide instant feedback
+            service.getCurrentSong()?.let { song ->
+                val isPlaying = service.isPlaying()
+                val progress = if (service.getDuration() > 0) {
+                    ((service.getCurrentPosition().toFloat() / service.getDuration()) * 100).toInt()
+                } else 0
+                view?.updateMiniPlayer(song, isPlaying, progress)
+            }
+        }
     }
     
     override fun onPreviousClicked() {
-        musicService?.previous()
+        musicService?.let { service ->
+            service.previous()
+
+            // Update UI after song change
+            service.getCurrentSong()?.let { song ->
+                val isPlaying = service.isPlaying()
+                val progress = if (service.getDuration() > 0) {
+                    ((service.getCurrentPosition().toFloat() / service.getDuration()) * 100).toInt()
+                } else 0
+                view?.updateMiniPlayer(song, isPlaying, progress)
+            }
+        }
     }
-    
+
     override fun onNextClicked() {
-        musicService?.next()
+        musicService?.let { service ->
+            service.next()
+
+            // Update UI after song change
+            service.getCurrentSong()?.let { song ->
+                val isPlaying = service.isPlaying()
+                val progress = if (service.getDuration() > 0) {
+                    ((service.getCurrentPosition().toFloat() / service.getDuration()) * 100).toInt()
+                } else 0
+                view?.updateMiniPlayer(song, isPlaying, progress)
+            }
+        }
     }
 }

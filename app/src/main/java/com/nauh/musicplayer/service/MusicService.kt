@@ -113,11 +113,19 @@ class MusicService : Service() {
             } else {
                 player.play()
             }
+
+            // Immediately notify UI about the state change
+            // This provides instant feedback while ExoPlayer's callback might have a slight delay
+            onPlayingStateChangedCallback?.invoke(player.isPlaying)
         }
     }
     
     fun pause() {
-        exoPlayer?.pause()
+        exoPlayer?.let { player ->
+            player.pause()
+            // Immediately notify UI about the state change
+            onPlayingStateChangedCallback?.invoke(player.isPlaying)
+        }
     }
     
     fun previous() {
