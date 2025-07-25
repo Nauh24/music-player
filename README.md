@@ -247,7 +247,7 @@ class MusicServiceConnection(private val context: Context) {
 <div align="center">
 
 
-*Made with Nguyen Van Huan*
+*Made by Nguyen Van Huan*
 
 </div>
 
