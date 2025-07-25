@@ -2,249 +2,213 @@ package com.nauh.musicplayer.ui
 
 import android.os.Bundle
 import android.view.View
-import android.widget.ImageButton
-import android.widget.ImageView
-import android.widget.ProgressBar
-import android.widget.SeekBar
-import android.widget.TextView
-import android.widget.Toast
+import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
-import androidx.core.content.ContextCompat
-import com.bumptech.glide.Glide
-import com.bumptech.glide.load.resource.bitmap.RoundedCorners
+import androidx.media3.common.Player
 import com.nauh.musicplayer.R
-import com.nauh.musicplayer.contract.PlayerContract
-import com.nauh.musicplayer.data.model.Song
-import com.nauh.musicplayer.presenter.PlayerPresenter
+import com.nauh.musicplayer.model.Song
+import com.nauh.musicplayer.mvp.PlayerContract
+import com.nauh.musicplayer.mvp.PlayerPresenter
+import com.nauh.musicplayer.utils.Constants
+import com.nauh.musicplayer.utils.TimeUtils
 
-/**
- * Player Activity implementing MVP pattern
- * Provides full-screen music player interface with controls
- */
 class PlayerActivity : AppCompatActivity(), PlayerContract.View {
-
-    companion object {
-        const val EXTRA_SONG = "extra_song"
-        const val EXTRA_PLAYLIST = "extra_playlist"
-    }
-
+    
     private lateinit var presenter: PlayerPresenter
     
-    // UI Components
+    // Views
     private lateinit var toolbar: Toolbar
-    private lateinit var albumArtwork: ImageView
-    private lateinit var songTitle: TextView
-    private lateinit var artistName: TextView
-    private lateinit var albumName: TextView
+    private lateinit var playerAlbumArtwork: ImageView
+    private lateinit var playerSongTitle: TextView
+    private lateinit var playerArtistName: TextView
+    private lateinit var playerAlbumName: TextView
     private lateinit var seekBar: SeekBar
     private lateinit var currentTime: TextView
     private lateinit var totalTime: TextView
-    private lateinit var playPauseButton: ImageButton
-    private lateinit var previousButton: ImageButton
-    private lateinit var nextButton: ImageButton
     private lateinit var shuffleButton: ImageButton
+    private lateinit var previousButton: ImageButton
+    private lateinit var playPauseButton: ImageButton
+    private lateinit var nextButton: ImageButton
     private lateinit var repeatButton: ImageButton
-    private lateinit var progressBar: ProgressBar
-
+    private lateinit var playerProgressBar: ProgressBar
+    
+    private var isUserSeeking = false
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_player)
         
-        initializeViews()
+        initViews()
         setupToolbar()
         setupSeekBar()
-        initializePresenter()
+        setupClickListeners()
         
-        // Get song and playlist from intent
-        val song = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            intent.getParcelableExtra(EXTRA_SONG, Song::class.java)
-        } else {
-            @Suppress("DEPRECATION")
-            intent.getParcelableExtra<Song>(EXTRA_SONG)
-        }
-
-        val playlist = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            intent.getParcelableArrayListExtra(EXTRA_PLAYLIST, Song::class.java) ?: emptyList()
-        } else {
-            @Suppress("DEPRECATION")
-            intent.getParcelableArrayListExtra<Song>(EXTRA_PLAYLIST) ?: emptyList()
-        }
+        presenter = PlayerPresenter(this, this)
+        presenter.attachView(this)
+        
+        // Get data from intent
+        val song = intent.getParcelableExtra<Song>(Constants.EXTRA_SONG)
+        val songs = intent.getParcelableArrayListExtra<Song>(Constants.EXTRA_SONG_LIST) ?: emptyList()
+        val position = intent.getIntExtra(Constants.EXTRA_CURRENT_POSITION, 0)
         
         if (song != null) {
-            presenter.initializePlayer(song, playlist)
+            presenter.initializePlayer(song, songs, position)
         } else {
-            finish() // Close activity if no song provided
+            finish()
         }
     }
-
-    private fun initializeViews() {
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        presenter.detachView()
+    }
+    
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        super.onBackPressed()
+        presenter.onBackPressed()
+    }
+    
+    private fun initViews() {
         toolbar = findViewById(R.id.playerToolbar)
-        albumArtwork = findViewById(R.id.playerAlbumArtwork)
-        songTitle = findViewById(R.id.playerSongTitle)
-        artistName = findViewById(R.id.playerArtistName)
-        albumName = findViewById(R.id.playerAlbumName)
+        playerAlbumArtwork = findViewById(R.id.playerAlbumArtwork)
+        playerSongTitle = findViewById(R.id.playerSongTitle)
+        playerArtistName = findViewById(R.id.playerArtistName)
+        playerAlbumName = findViewById(R.id.playerAlbumName)
         seekBar = findViewById(R.id.seekBar)
         currentTime = findViewById(R.id.currentTime)
         totalTime = findViewById(R.id.totalTime)
-        playPauseButton = findViewById(R.id.playPauseButton)
-        previousButton = findViewById(R.id.previousButton)
-        nextButton = findViewById(R.id.nextButton)
         shuffleButton = findViewById(R.id.shuffleButton)
+        previousButton = findViewById(R.id.previousButton)
+        playPauseButton = findViewById(R.id.playPauseButton)
+        nextButton = findViewById(R.id.nextButton)
         repeatButton = findViewById(R.id.repeatButton)
-        progressBar = findViewById(R.id.playerProgressBar)
+        playerProgressBar = findViewById(R.id.playerProgressBar)
     }
-
+    
     private fun setupToolbar() {
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         toolbar.setNavigationOnClickListener {
-            finish()
+            onBackPressed()
         }
     }
-
+    
     private fun setupSeekBar() {
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
-                    // Calculate position based on progress and duration
-                    // This will be implemented when we integrate with actual player
+                    currentTime.text = TimeUtils.formatTime((progress * seekBar!!.max / 100).toLong())
                 }
             }
             
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {
+                isUserSeeking = true
+            }
             
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                seekBar?.let { bar ->
-                    // Seek to the selected position
-                    val progress = bar.progress
-                    val duration = bar.max
-                    if (duration > 0) {
-                        val position = (progress.toFloat() / 100f * duration).toLong()
-                        presenter.seekTo(position)
-                    }
-                }
+                isUserSeeking = false
+                val position = (seekBar!!.progress.toFloat() / seekBar.max * seekBar.tag as Long).toLong()
+                presenter.onSeekTo(position)
             }
         })
-        
-        // Setup control button listeners
-        playPauseButton.setOnClickListener {
-            presenter.playPause()
+    }
+    
+    private fun setupClickListeners() {
+        shuffleButton.setOnClickListener {
+            presenter.onShuffleClicked()
         }
         
         previousButton.setOnClickListener {
-            presenter.skipToPrevious()
+            presenter.onPreviousClicked()
+        }
+        
+        playPauseButton.setOnClickListener {
+            presenter.onPlayPauseClicked()
         }
         
         nextButton.setOnClickListener {
-            presenter.skipToNext()
-        }
-        
-        shuffleButton.setOnClickListener {
-            presenter.toggleShuffle()
+            presenter.onNextClicked()
         }
         
         repeatButton.setOnClickListener {
-            presenter.toggleRepeat()
+            presenter.onRepeatClicked()
         }
     }
-
-    private fun initializePresenter() {
-        presenter = PlayerPresenter()
-        presenter.attachView(this)
-        presenter.initializeMusicService(this)
+    
+    // PlayerContract.View implementation
+    override fun showLoading() {
+        playerProgressBar.visibility = View.VISIBLE
     }
-
-    // MVP View Interface Implementation
-    override fun showSongInfo(song: Song) {
-        songTitle.text = song.title
-        artistName.text = song.artist
-        albumName.text = song.album
-        totalTime.text = song.getFormattedDuration()
+    
+    override fun hideLoading() {
+        playerProgressBar.visibility = View.GONE
+    }
+    
+    override fun updateSongInfo(song: Song) {
+        playerSongTitle.text = song.title
+        playerArtistName.text = song.artist
+        playerAlbumName.text = song.album
+        playerAlbumArtwork.setImageResource(R.drawable.placeholder_album_art)
         
-        // Load album artwork
-        Glide.with(this)
-            .load(song.artworkUrl)
-            .placeholder(R.drawable.placeholder_album_art)
-            .error(R.drawable.placeholder_album_art)
-            .transform(RoundedCorners(32))
-            .into(albumArtwork)
+        // Set total time
+        totalTime.text = song.getFormattedDuration()
+        seekBar.tag = song.duration // Store duration for seek calculation
     }
-
+    
     override fun updatePlayPauseButton(isPlaying: Boolean) {
-        val iconRes = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play_arrow
+        val iconRes = if (isPlaying) {
+            R.drawable.ic_pause
+        } else {
+            R.drawable.ic_play_arrow
+        }
         playPauseButton.setImageResource(iconRes)
     }
-
+    
     override fun updateProgress(currentPosition: Long, duration: Long) {
-        val minutes = (currentPosition / 1000) / 60
-        val seconds = (currentPosition / 1000) % 60
-        currentTime.text = String.format("%02d:%02d", minutes, seconds)
-    }
-
-    override fun updateSeekBar(position: Int, max: Int) {
-        seekBar.max = max
-        seekBar.progress = position
-    }
-
-    override fun showLoading() {
-        progressBar.visibility = View.VISIBLE
-    }
-
-    override fun hideLoading() {
-        progressBar.visibility = View.GONE
-    }
-
-    override fun showError(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-    }
-
-    override fun enablePreviousButton(enabled: Boolean) {
-        previousButton.isEnabled = enabled
-        previousButton.alpha = if (enabled) 1.0f else 0.5f
-    }
-
-    override fun enableNextButton(enabled: Boolean) {
-        nextButton.isEnabled = enabled
-        nextButton.alpha = if (enabled) 1.0f else 0.5f
-    }
-
-    override fun showShuffleState(isShuffled: Boolean) {
-        val color = if (isShuffled) {
-            ContextCompat.getColor(this, R.color.primary)
-        } else {
-            ContextCompat.getColor(this, R.color.text_secondary)
+        if (!isUserSeeking && duration > 0) {
+            val progress = ((currentPosition.toFloat() / duration) * 100).toInt()
+            seekBar.progress = progress
+            currentTime.text = TimeUtils.formatTime(currentPosition)
+            
+            if (seekBar.tag == null) {
+                seekBar.tag = duration
+                totalTime.text = TimeUtils.formatTime(duration)
+            }
         }
-        shuffleButton.setColorFilter(color)
     }
-
-    override fun showRepeatState(repeatMode: Int) {
-        val (iconRes, color) = when (repeatMode) {
-            PlayerContract.RepeatMode.OFF -> {
-                R.drawable.ic_repeat to ContextCompat.getColor(this, R.color.text_secondary)
+    
+    override fun updateShuffleButton(isShuffleEnabled: Boolean) {
+        val tintColor = if (isShuffleEnabled) {
+            getColor(R.color.primary)
+        } else {
+            getColor(R.color.text_secondary)
+        }
+        shuffleButton.setColorFilter(tintColor)
+    }
+    
+    override fun updateRepeatButton(repeatMode: Int) {
+        val (iconRes, tintColor) = when (repeatMode) {
+            Player.REPEAT_MODE_OFF -> {
+                R.drawable.ic_repeat to getColor(R.color.text_secondary)
             }
-            PlayerContract.RepeatMode.ALL -> {
-                R.drawable.ic_repeat to ContextCompat.getColor(this, R.color.primary)
+            Player.REPEAT_MODE_ALL -> {
+                R.drawable.ic_repeat to getColor(R.color.primary)
             }
-            PlayerContract.RepeatMode.ONE -> {
-                R.drawable.ic_repeat to ContextCompat.getColor(this, R.color.primary)
+            Player.REPEAT_MODE_ONE -> {
+                R.drawable.ic_repeat_one to getColor(R.color.primary)
             }
             else -> {
-                R.drawable.ic_repeat to ContextCompat.getColor(this, R.color.text_secondary)
+                R.drawable.ic_repeat to getColor(R.color.text_secondary)
             }
         }
         
         repeatButton.setImageResource(iconRes)
-        repeatButton.setColorFilter(color)
+        repeatButton.setColorFilter(tintColor)
     }
-
-    override fun updatePlaylist(songs: List<Song>, currentIndex: Int) {
-        // Update playlist information if needed
-        // This could be used to show playlist info or update navigation buttons
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        presenter.detachView()
+    
+    override fun showError(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 }

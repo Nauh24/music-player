@@ -1,5 +1,6 @@
 package com.nauh.musicplayer.service
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -7,158 +8,110 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.media.app.NotificationCompat as MediaNotificationCompat
+import androidx.media.app.NotificationCompat.MediaStyle
 import com.nauh.musicplayer.R
-import com.nauh.musicplayer.data.model.Song
-import com.nauh.musicplayer.ui.PlayerActivity
+import com.nauh.musicplayer.model.Song
+import com.nauh.musicplayer.ui.MainActivity
+import com.nauh.musicplayer.utils.Constants
 
-/**
- * Helper class for managing music playback notifications
- * Creates and updates notifications with media controls
- */
 class NotificationHelper(private val context: Context) {
     
-    companion object {
-        const val CHANNEL_ID = "music_playback_channel"
-        const val NOTIFICATION_ID = 1001
-        
-        // Notification actions
-        const val ACTION_PLAY_PAUSE = "action_play_pause"
-        const val ACTION_PREVIOUS = "action_previous"
-        const val ACTION_NEXT = "action_next"
-        const val ACTION_STOP = "action_stop"
-    }
-    
-    private val notificationManager = NotificationManagerCompat.from(context)
+    private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     
     init {
         createNotificationChannel()
     }
     
-    /**
-     * Create notification channel for Android O and above
-     */
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Music Playback",
+                Constants.NOTIFICATION_CHANNEL_ID,
+                context.getString(R.string.notification_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Controls for music playback"
+                description = context.getString(R.string.notification_channel_description)
                 setShowBadge(false)
-                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
-            
-            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
+            notificationManager.createNotificationChannel(channel)
         }
     }
     
-    /**
-     * Create or update the music playback notification
-     */
     fun createNotification(
         song: Song,
         isPlaying: Boolean,
-        canGoPrevious: Boolean = true,
-        canGoNext: Boolean = true
-    ): android.app.Notification {
+        playPauseIntent: PendingIntent,
+        previousIntent: PendingIntent,
+        nextIntent: PendingIntent
+    ): Notification {
         
-        // Intent to open the player activity when notification is tapped
-        val contentIntent = Intent(context, PlayerActivity::class.java).apply {
-            putExtra(PlayerActivity.EXTRA_SONG, song)
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+        val contentIntent = Intent(context, MainActivity::class.java).let { intent ->
+            PendingIntent.getActivity(
+                context, 
+                0, 
+                intent, 
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
         }
-        val contentPendingIntent = PendingIntent.getActivity(
-            context,
-            0,
-            contentIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
         
-        // Create action intents
-        val playPauseIntent = createActionIntent(ACTION_PLAY_PAUSE)
-        val previousIntent = createActionIntent(ACTION_PREVIOUS)
-        val nextIntent = createActionIntent(ACTION_NEXT)
-        val stopIntent = createActionIntent(ACTION_STOP)
+        val playPauseIcon = if (isPlaying) {
+            R.drawable.ic_pause
+        } else {
+            R.drawable.ic_play_arrow
+        }
         
-        // Build the notification
-        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_music_note)
+        val playPauseText = if (isPlaying) {
+            context.getString(R.string.pause)
+        } else {
+            context.getString(R.string.play)
+        }
+        
+        return NotificationCompat.Builder(context, Constants.NOTIFICATION_CHANNEL_ID)
             .setContentTitle(song.title)
-            .setContentText(song.getArtistAlbumText())
+            .setContentText(song.artist)
             .setSubText(song.album)
-            .setContentIntent(contentPendingIntent)
-            .setDeleteIntent(stopIntent)
+            .setSmallIcon(R.drawable.ic_music_note)
+            .setContentIntent(contentIntent)
+            .setDeleteIntent(createStopIntent())
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOnlyAlertOnce(true)
-            .setShowWhen(false)
-            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-        
-        // Add media style with actions
-        val mediaStyle = MediaNotificationCompat.MediaStyle()
-            .setShowActionsInCompactView(0, 1, 2) // Show previous, play/pause, next in compact view
-        
-        builder.setStyle(mediaStyle)
-        
-        // Add action buttons
-        if (canGoPrevious) {
-            builder.addAction(
-                R.drawable.ic_skip_previous,
-                "Previous",
-                previousIntent
+            .addAction(
+                NotificationCompat.Action.Builder(
+                    R.drawable.ic_skip_previous,
+                    context.getString(R.string.previous),
+                    previousIntent
+                ).build()
             )
-        }
-
-        val playPauseIcon = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play_arrow
-        val playPauseText = if (isPlaying) "Pause" else "Play"
-        builder.addAction(playPauseIcon, playPauseText, playPauseIntent)
-
-        if (canGoNext) {
-            builder.addAction(
-                R.drawable.ic_skip_next,
-                "Next",
-                nextIntent
+            .addAction(
+                NotificationCompat.Action.Builder(
+                    playPauseIcon,
+                    playPauseText,
+                    playPauseIntent
+                ).build()
             )
-        }
-        
-        return builder.build()
+            .addAction(
+                NotificationCompat.Action.Builder(
+                    R.drawable.ic_skip_next,
+                    context.getString(R.string.next),
+                    nextIntent
+                ).build()
+            )
+            .setStyle(
+                MediaStyle()
+                    .setShowActionsInCompactView(0, 1, 2)
+                    .setShowCancelButton(true)
+                    .setCancelButtonIntent(createStopIntent())
+            )
+            .build()
     }
     
-    /**
-     * Show the notification
-     */
-    fun showNotification(notification: android.app.Notification) {
-        notificationManager.notify(NOTIFICATION_ID, notification)
-    }
-
-    /**
-     * Update the existing notification
-     */
-    fun updateNotification(notification: android.app.Notification) {
-        notificationManager.notify(NOTIFICATION_ID, notification)
-    }
-    
-    /**
-     * Cancel the notification
-     */
-    fun cancelNotification() {
-        notificationManager.cancel(NOTIFICATION_ID)
-    }
-    
-    /**
-     * Create a PendingIntent for notification actions
-     */
-    private fun createActionIntent(action: String): PendingIntent {
+    private fun createStopIntent(): PendingIntent {
         val intent = Intent(context, MusicService::class.java).apply {
-            this.action = action
+            action = Constants.ACTION_STOP
         }
         return PendingIntent.getService(
             context,
-            action.hashCode(),
+            Constants.ACTION_STOP.hashCode(),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

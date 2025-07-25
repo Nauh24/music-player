@@ -1,4 +1,4 @@
-package com.nauh.musicplayer.ui.adapter
+package com.nauh.musicplayer.ui
 
 import android.view.LayoutInflater
 import android.view.View
@@ -9,57 +9,48 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.bumptech.glide.Glide
-import com.bumptech.glide.load.resource.bitmap.RoundedCorners
 import com.nauh.musicplayer.R
-import com.nauh.musicplayer.data.model.Song
+import com.nauh.musicplayer.model.Song
 
-/**
- * RecyclerView adapter for displaying songs in a list
- * Uses ListAdapter with DiffUtil for efficient updates
- */
 class SongAdapter(
-    private val onSongClick: (Song, List<Song>) -> Unit,
-    private val onMoreOptionsClick: (Song) -> Unit = {}
+    private val onSongClick: (Song, List<Song>, Int) -> Unit,
+    private val onMoreOptionsClick: (Song) -> Unit
 ) : ListAdapter<Song, SongAdapter.SongViewHolder>(SongDiffCallback()) {
-
-    private var currentPlayingSong: Song? = null
-
+    
+    private var currentPlayingSongId: String? = null
+    
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): SongViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_song, parent, false)
         return SongViewHolder(view)
     }
-
+    
     override fun onBindViewHolder(holder: SongViewHolder, position: Int) {
         val song = getItem(position)
-        holder.bind(song, currentPlayingSong?.id == song.id)
+        holder.bind(song, position)
     }
-
-    /**
-     * Update the currently playing song to show visual indicator
-     */
-    fun updateCurrentPlayingSong(song: Song?) {
-        val oldPlayingSong = currentPlayingSong
-        currentPlayingSong = song
+    
+    fun setCurrentPlayingSong(songId: String?) {
+        val oldPlayingSongId = currentPlayingSongId
+        currentPlayingSongId = songId
         
         // Update the old playing song item
-        oldPlayingSong?.let { oldSong ->
-            val oldIndex = currentList.indexOfFirst { it.id == oldSong.id }
-            if (oldIndex != -1) {
-                notifyItemChanged(oldIndex)
+        oldPlayingSongId?.let { oldId ->
+            val oldPosition = currentList.indexOfFirst { it.id == oldId }
+            if (oldPosition != -1) {
+                notifyItemChanged(oldPosition)
             }
         }
         
         // Update the new playing song item
-        song?.let { newSong ->
-            val newIndex = currentList.indexOfFirst { it.id == newSong.id }
-            if (newIndex != -1) {
-                notifyItemChanged(newIndex)
+        songId?.let { newId ->
+            val newPosition = currentList.indexOfFirst { it.id == newId }
+            if (newPosition != -1) {
+                notifyItemChanged(newPosition)
             }
         }
     }
-
+    
     inner class SongViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val albumArtwork: ImageView = itemView.findViewById(R.id.albumArtwork)
         private val songTitle: TextView = itemView.findViewById(R.id.songTitle)
@@ -67,42 +58,35 @@ class SongAdapter(
         private val songDuration: TextView = itemView.findViewById(R.id.songDuration)
         private val moreOptions: ImageButton = itemView.findViewById(R.id.moreOptions)
         private val playingIndicator: ImageView = itemView.findViewById(R.id.playingIndicator)
-
-        fun bind(song: Song, isCurrentlyPlaying: Boolean) {
+        
+        fun bind(song: Song, position: Int) {
             songTitle.text = song.title
-            artistAlbum.text = song.getArtistAlbumText()
+            artistAlbum.text = song.getArtistAlbum()
             songDuration.text = song.getFormattedDuration()
             
             // Show/hide playing indicator
+            val isCurrentlyPlaying = song.id == currentPlayingSongId
             playingIndicator.visibility = if (isCurrentlyPlaying) View.VISIBLE else View.GONE
-            
-            // Load album artwork
-            Glide.with(itemView.context)
-                .load(song.artworkUrl)
-                .placeholder(R.drawable.placeholder_album_art)
-                .error(R.drawable.placeholder_album_art)
-                .transform(RoundedCorners(16))
-                .into(albumArtwork)
             
             // Set click listeners
             itemView.setOnClickListener {
-                onSongClick(song, currentList)
+                onSongClick(song, currentList, position)
             }
             
             moreOptions.setOnClickListener {
                 onMoreOptionsClick(song)
             }
+            
+            // Load album artwork (placeholder for now)
+            albumArtwork.setImageResource(R.drawable.placeholder_album_art)
         }
     }
-
-    /**
-     * DiffUtil callback for efficient list updates
-     */
+    
     private class SongDiffCallback : DiffUtil.ItemCallback<Song>() {
         override fun areItemsTheSame(oldItem: Song, newItem: Song): Boolean {
             return oldItem.id == newItem.id
         }
-
+        
         override fun areContentsTheSame(oldItem: Song, newItem: Song): Boolean {
             return oldItem == newItem
         }

@@ -5,158 +5,187 @@ import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
-import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.ProgressBar
-import android.widget.Toast
+import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.nauh.musicplayer.R
-import com.nauh.musicplayer.contract.MainContract
-import com.nauh.musicplayer.data.model.Song
-import com.nauh.musicplayer.presenter.MainPresenter
-import com.nauh.musicplayer.ui.adapter.SongAdapter
+import com.nauh.musicplayer.model.Song
+import com.nauh.musicplayer.mvp.MainContract
+import com.nauh.musicplayer.mvp.MainPresenter
+import com.nauh.musicplayer.utils.Constants
 
-/**
- * Main Activity implementing MVP pattern
- * Displays the list of songs and handles user interactions
- */
 class MainActivity : AppCompatActivity(), MainContract.View {
-
+    
     private lateinit var presenter: MainPresenter
     private lateinit var songAdapter: SongAdapter
-
-    // UI Components
+    
+    // Views
     private lateinit var searchEditText: EditText
     private lateinit var songsRecyclerView: RecyclerView
     private lateinit var progressBar: ProgressBar
     private lateinit var emptyStateLayout: LinearLayout
     private lateinit var miniPlayer: View
-
+    private lateinit var miniAlbumArtwork: ImageView
+    private lateinit var miniSongTitle: TextView
+    private lateinit var miniArtistName: TextView
+    private lateinit var miniPlayPauseButton: ImageButton
+    private lateinit var miniPreviousButton: ImageButton
+    private lateinit var miniNextButton: ImageButton
+    private lateinit var miniProgressBar: ProgressBar
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-
-        initializeViews()
+        
+        initViews()
         setupRecyclerView()
         setupSearchView()
-        initializePresenter()
-
-        // Load songs when activity starts
+        setupMiniPlayer()
+        
+        presenter = MainPresenter(this, this)
+        presenter.attachView(this)
         presenter.loadSongs()
     }
-
-    private fun initializeViews() {
-        // Setup toolbar
-        val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.toolbar)
-        setSupportActionBar(toolbar)
-
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        presenter.detachView()
+    }
+    
+    private fun initViews() {
         searchEditText = findViewById(R.id.searchEditText)
         songsRecyclerView = findViewById(R.id.songsRecyclerView)
         progressBar = findViewById(R.id.progressBar)
         emptyStateLayout = findViewById(R.id.emptyStateLayout)
         miniPlayer = findViewById(R.id.miniPlayer)
+        miniAlbumArtwork = findViewById(R.id.miniAlbumArtwork)
+        miniSongTitle = findViewById(R.id.miniSongTitle)
+        miniArtistName = findViewById(R.id.miniArtistName)
+        miniPlayPauseButton = findViewById(R.id.miniPlayPauseButton)
+        miniPreviousButton = findViewById(R.id.miniPreviousButton)
+        miniNextButton = findViewById(R.id.miniNextButton)
+        miniProgressBar = findViewById(R.id.miniProgressBar)
     }
-
+    
     private fun setupRecyclerView() {
         songAdapter = SongAdapter(
-            onSongClick = { song, playlist ->
-                presenter.onSongClicked(song, playlist)
+            onSongClick = { song, songs, position ->
+                presenter.onSongClicked(song, songs, position)
             },
             onMoreOptionsClick = { song ->
-                // Handle more options click (e.g., show popup menu)
-                showSongOptions(song)
+                // Handle more options click (show popup menu, etc.)
+                showMoreOptionsMenu(song)
             }
         )
-
+        
         songsRecyclerView.apply {
             layoutManager = LinearLayoutManager(this@MainActivity)
             adapter = songAdapter
         }
     }
-
+    
     private fun setupSearchView() {
         searchEditText.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-
+            
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-
+            
             override fun afterTextChanged(s: Editable?) {
                 val query = s?.toString()?.trim() ?: ""
-                if (query.isEmpty()) {
-                    presenter.clearSearch()
-                } else {
-                    presenter.searchSongs(query)
-                }
+                presenter.searchSongs(query)
             }
         })
     }
-
-    private fun initializePresenter() {
-        presenter = MainPresenter()
-        presenter.attachView(this)
+    
+    private fun setupMiniPlayer() {
+        miniPlayer.setOnClickListener {
+            presenter.onMiniPlayerClicked()
+        }
+        
+        miniPlayPauseButton.setOnClickListener {
+            presenter.onPlayPauseClicked()
+        }
+        
+        miniPreviousButton.setOnClickListener {
+            presenter.onPreviousClicked()
+        }
+        
+        miniNextButton.setOnClickListener {
+            presenter.onNextClicked()
+        }
     }
-
-    private fun showSongOptions(song: Song) {
-        // For now, just show a toast
-        // In a real app, this would show a popup menu with options like "Add to playlist", "Share", etc.
-        Toast.makeText(this, "Options for ${song.title}", Toast.LENGTH_SHORT).show()
+    
+    private fun showMoreOptionsMenu(song: Song) {
+        // For now, just show a simple toast
+        // In a real app, you might show a popup menu with options like "Add to playlist", "Share", etc.
+        Toast.makeText(this, "More options for: ${song.title}", Toast.LENGTH_SHORT).show()
     }
-
-    // MVP View Interface Implementation
+    
+    // MainContract.View implementation
     override fun showLoading() {
         progressBar.visibility = View.VISIBLE
         songsRecyclerView.visibility = View.GONE
         emptyStateLayout.visibility = View.GONE
     }
-
+    
     override fun hideLoading() {
         progressBar.visibility = View.GONE
     }
-
+    
     override fun showSongs(songs: List<Song>) {
-        hideLoading()
         songsRecyclerView.visibility = View.VISIBLE
         emptyStateLayout.visibility = View.GONE
         songAdapter.submitList(songs)
     }
-
-    override fun showError(message: String) {
-        hideLoading()
-        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-    }
-
+    
     override fun showEmptyState() {
-        hideLoading()
         songsRecyclerView.visibility = View.GONE
         emptyStateLayout.visibility = View.VISIBLE
     }
-
-    override fun navigateToPlayer(song: Song, playlist: List<Song>) {
+    
+    override fun showError(message: String) {
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    }
+    
+    override fun navigateToPlayer(song: Song, songs: List<Song>, position: Int) {
         val intent = Intent(this, PlayerActivity::class.java).apply {
-            putExtra(PlayerActivity.EXTRA_SONG, song)
-            putParcelableArrayListExtra(PlayerActivity.EXTRA_PLAYLIST, ArrayList(playlist))
+            putExtra(Constants.EXTRA_SONG, song)
+            putParcelableArrayListExtra(Constants.EXTRA_SONG_LIST, ArrayList(songs))
+            putExtra(Constants.EXTRA_CURRENT_POSITION, position)
         }
         startActivity(intent)
     }
-
-    override fun updateCurrentPlayingSong(song: Song?) {
-        songAdapter.updateCurrentPlayingSong(song)
-        // Show/hide mini player based on whether a song is playing
-        miniPlayer.visibility = if (song != null) View.VISIBLE else View.GONE
+    
+    override fun showMiniPlayer(song: Song) {
+        miniPlayer.visibility = View.VISIBLE
+        miniSongTitle.text = song.title
+        miniArtistName.text = song.artist
+        miniAlbumArtwork.setImageResource(R.drawable.placeholder_album_art)
+        
+        // Update the adapter to show playing indicator
+        songAdapter.setCurrentPlayingSong(song.id)
     }
-
-    override fun showSearchResults(songs: List<Song>) {
-        showSongs(songs)
+    
+    override fun hideMiniPlayer() {
+        miniPlayer.visibility = View.GONE
+        songAdapter.setCurrentPlayingSong(null)
     }
-
-    override fun clearSearchResults() {
-        // This will be handled by showing all songs again
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        presenter.detachView()
+    
+    override fun updateMiniPlayer(song: Song, isPlaying: Boolean, progress: Int) {
+        miniSongTitle.text = song.title
+        miniArtistName.text = song.artist
+        
+        val playPauseIcon = if (isPlaying) {
+            R.drawable.ic_pause
+        } else {
+            R.drawable.ic_play_arrow
+        }
+        miniPlayPauseButton.setImageResource(playPauseIcon)
+        
+        miniProgressBar.progress = progress
+        
+        // Update the adapter to show playing indicator
+        songAdapter.setCurrentPlayingSong(song.id)
     }
 }

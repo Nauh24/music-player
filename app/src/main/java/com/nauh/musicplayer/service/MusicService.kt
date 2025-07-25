@@ -1,245 +1,243 @@
 package com.nauh.musicplayer.service
 
 import android.app.PendingIntent
+import android.app.Service
 import android.content.Intent
-import android.os.Build
-import android.os.Bundle
-import android.util.Log
-import androidx.media3.common.AudioAttributes
-import androidx.media3.common.C
+import android.os.Binder
+import android.os.IBinder
+import androidx.lifecycle.MutableLiveData
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
-import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.session.MediaSession
-import androidx.media3.session.MediaSessionService
-import com.google.common.util.concurrent.Futures
-import com.google.common.util.concurrent.ListenableFuture
-import com.nauh.musicplayer.data.model.Song
-import com.nauh.musicplayer.service.NotificationHelper
+import com.nauh.musicplayer.model.Song
 import com.nauh.musicplayer.ui.MainActivity
+import com.nauh.musicplayer.utils.Constants
+import kotlinx.coroutines.*
 
-/**
- * Background music service using ExoPlayer and MediaSession
- * Handles audio playback, notifications, and media controls
- */
-class MusicService : MediaSessionService() {
-
-    private var mediaSession: MediaSession? = null
-    private lateinit var player: ExoPlayer
-    private lateinit var notificationHelper: NotificationHelper
+class MusicService : Service() {
+    
+    private var exoPlayer: ExoPlayer? = null
+    private val binder = MusicBinder()
     private var currentSong: Song? = null
-
-
-
+    private var playlist: List<Song> = emptyList()
+    private var currentPosition = 0
+    private var isShuffleEnabled = false
+    private var repeatMode = Player.REPEAT_MODE_OFF
+    
+    // Callbacks for UI updates
+    private var onSongChangedCallback: ((Song?) -> Unit)? = null
+    private var onPlayingStateChangedCallback: ((Boolean) -> Unit)? = null
+    private var onProgressChangedCallback: ((Long, Long) -> Unit)? = null
+    private var onShuffleChangedCallback: ((Boolean) -> Unit)? = null
+    private var onRepeatModeChangedCallback: ((Int) -> Unit)? = null
+    
+    private var progressUpdateJob: Job? = null
+    private lateinit var notificationHelper: NotificationHelper
+    
+    inner class MusicBinder : Binder() {
+        fun getService(): MusicService = this@MusicService
+    }
+    
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "MusicService onCreate")
-        notificationHelper = NotificationHelper(this)
         initializePlayer()
-        initializeMediaSession()
+        notificationHelper = NotificationHelper(this)
+    }
+
+    override fun onBind(intent: Intent): IBinder {
+        return binder
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "MusicService onStartCommand")
-
-        // Start foreground service if we have a current song
-        currentSong?.let { song ->
-            startForegroundWithNotification(song, player.isPlaying)
+        when (intent?.action) {
+            Constants.ACTION_PLAY -> playPause()
+            Constants.ACTION_PAUSE -> pause()
+            Constants.ACTION_PREVIOUS -> previous()
+            Constants.ACTION_NEXT -> next()
+            Constants.ACTION_STOP -> stopSelf()
         }
 
-        return super.onStartCommand(intent, flags, startId)
-    }
-
-    private fun startForegroundWithNotification(song: Song, isPlaying: Boolean) {
-        try {
-            val notification = notificationHelper.createNotification(song, isPlaying)
-            startForeground(NotificationHelper.NOTIFICATION_ID, notification)
-            Log.d(TAG, "Started foreground service with notification")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start foreground service", e)
-        }
-    }
-
-    private fun updateNotification(song: Song, isPlaying: Boolean) {
-        try {
-            val notification = notificationHelper.createNotification(song, isPlaying)
-            notificationHelper.updateNotification(notification)
-
-            // Start foreground service if not already started
-            if (isPlaying) {
-                startForeground(NotificationHelper.NOTIFICATION_ID, notification)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to update notification", e)
-        }
+        return START_STICKY
     }
     
     private fun initializePlayer() {
-        Log.d(TAG, "Initializing ExoPlayer")
-        player = ExoPlayer.Builder(this)
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                    .setUsage(C.USAGE_MEDIA)
-                    .build(),
-                true
-            )
-            .setHandleAudioBecomingNoisy(true)
-            .build()
+        exoPlayer = ExoPlayer.Builder(this).build().apply {
+            addListener(object : Player.Listener {
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    onPlayingStateChangedCallback?.invoke(isPlaying)
+                    updateNotification()
 
-        // Add player listener for debugging and error handling
-        player.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                val stateString = when (playbackState) {
-                    Player.STATE_IDLE -> "IDLE"
-                    Player.STATE_BUFFERING -> "BUFFERING"
-                    Player.STATE_READY -> "READY"
-                    Player.STATE_ENDED -> "ENDED"
-                    else -> "UNKNOWN"
-                }
-                Log.d(TAG, "Player state changed to: $stateString")
-
-                // Log current media item when ready
-                if (playbackState == Player.STATE_READY) {
-                    val currentItem = player.currentMediaItem
-                    Log.d(TAG, "Now playing: ${currentItem?.mediaMetadata?.title} from ${currentItem?.localConfiguration?.uri}")
-                }
-            }
-
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                Log.d(TAG, "Player isPlaying changed to: $isPlaying")
-
-                // Update notification when playback state changes
-                currentSong?.let { song ->
-                    updateNotification(song, isPlaying)
-                }
-            }
-
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                Log.d(TAG, "Media item transition: ${mediaItem?.mediaMetadata?.title}")
-                mediaItem?.let { item ->
-                    // Update current song and notification
-                    val song = Song(
-                        id = item.mediaId,
-                        title = item.mediaMetadata.title?.toString() ?: "Unknown",
-                        artist = item.mediaMetadata.artist?.toString() ?: "Unknown",
-                        album = item.mediaMetadata.albumTitle?.toString() ?: "Unknown",
-                        duration = player.duration.takeIf { it > 0 } ?: 0,
-                        artworkUrl = item.mediaMetadata.artworkUri?.toString() ?: "",
-                        streamUrl = item.localConfiguration?.uri?.toString() ?: ""
-                    )
-                    currentSong = song
-                    updateNotification(song, player.isPlaying)
-                }
-            }
-
-            override fun onPlayerError(error: PlaybackException) {
-                Log.e(TAG, "Player error occurred: ${error.message}", error)
-                Log.e(TAG, "Error code: ${error.errorCode}")
-
-                // Log the problematic URL
-                val currentItem = player.currentMediaItem
-                Log.e(TAG, "Error with media item: ${currentItem?.localConfiguration?.uri}")
-            }
-        })
-
-        Log.d(TAG, "ExoPlayer initialized successfully")
-    }
-    
-    private fun initializeMediaSession() {
-        val sessionActivityPendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE
-        )
-        
-        mediaSession = MediaSession.Builder(this, player)
-            .setSessionActivity(sessionActivityPendingIntent)
-            .setCallback(MediaSessionCallback())
-            .build()
-    }
-    
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
-        return mediaSession
-    }
-    
-    override fun onDestroy() {
-        mediaSession?.run {
-            player.release()
-            release()
-            mediaSession = null
-        }
-        super.onDestroy()
-    }
-    
-    /**
-     * Custom MediaSession callback to handle media commands
-     */
-    private inner class MediaSessionCallback : MediaSession.Callback {
-
-        override fun onAddMediaItems(
-            mediaSession: MediaSession,
-            controller: MediaSession.ControllerInfo,
-            mediaItems: MutableList<MediaItem>
-        ): ListenableFuture<MutableList<MediaItem>> {
-            Log.d(TAG, "onAddMediaItems called with ${mediaItems.size} items")
-            val updatedMediaItems = mediaItems.map { mediaItem ->
-                Log.d(TAG, "Processing MediaItem: ${mediaItem.mediaMetadata.title} with URI: ${mediaItem.localConfiguration?.uri}")
-                mediaItem.buildUpon()
-                    .setUri(mediaItem.localConfiguration?.uri ?: mediaItem.requestMetadata.mediaUri)
-                    .build()
-            }.toMutableList()
-            return Futures.immediateFuture(updatedMediaItems)
-        }
-    }
-    
-    companion object {
-        private const val TAG = "MusicService"
-
-        /**
-         * Convert Song object to MediaItem for ExoPlayer
-         */
-        fun createMediaItem(song: Song): MediaItem {
-            Log.d(TAG, "Creating MediaItem for song: ${song.title} with URL: ${song.streamUrl}")
-
-            // Validate stream URL
-            if (song.streamUrl.isBlank()) {
-                Log.e(TAG, "Stream URL is empty for song: ${song.title}")
-                throw IllegalArgumentException("Stream URL cannot be empty")
-            }
-
-            val metadata = MediaMetadata.Builder()
-                .setTitle(song.title)
-                .setArtist(song.artist)
-                .setAlbumTitle(song.album)
-                .setArtworkUri(
-                    try {
-                        android.net.Uri.parse(song.artworkUrl)
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Failed to parse artwork URL: ${song.artworkUrl}", e)
-                        null
+                    if (isPlaying) {
+                        startProgressUpdate()
+                    } else {
+                        stopProgressUpdate()
                     }
-                )
-                .build()
+                }
 
-            val mediaItem = MediaItem.Builder()
-                .setUri(song.streamUrl)
-                .setMediaId(song.id)
-                .setMediaMetadata(metadata)
-                .build()
-
-            Log.d(TAG, "MediaItem created successfully for: ${song.title}")
-            return mediaItem
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    when (playbackState) {
+                        Player.STATE_ENDED -> {
+                            if (repeatMode == Player.REPEAT_MODE_ONE) {
+                                seekTo(0)
+                                play()
+                            } else {
+                                next()
+                            }
+                        }
+                    }
+                }
+            })
+        }
+    }
+    
+    fun playSong(song: Song, songs: List<Song>, position: Int) {
+        currentSong = song
+        playlist = songs
+        currentPosition = position
+        
+        val mediaItem = MediaItem.fromUri(song.url)
+        exoPlayer?.apply {
+            setMediaItem(mediaItem)
+            prepare()
+            play()
         }
         
-        /**
-         * Create a list of MediaItems from a list of Songs
-         */
-        fun createMediaItems(songs: List<Song>): List<MediaItem> {
-            return songs.map { createMediaItem(it) }
+        onSongChangedCallback?.invoke(song)
+        updateNotification()
+    }
+    
+    fun playPause() {
+        exoPlayer?.let { player ->
+            if (player.isPlaying) {
+                player.pause()
+            } else {
+                player.play()
+            }
         }
+    }
+    
+    fun pause() {
+        exoPlayer?.pause()
+    }
+    
+    fun previous() {
+        if (playlist.isNotEmpty()) {
+            currentPosition = if (currentPosition > 0) {
+                currentPosition - 1
+            } else {
+                playlist.size - 1
+            }
+            playSong(playlist[currentPosition], playlist, currentPosition)
+        }
+    }
+    
+    fun next() {
+        if (playlist.isNotEmpty()) {
+            currentPosition = if (isShuffleEnabled) {
+                (0 until playlist.size).random()
+            } else {
+                if (currentPosition < playlist.size - 1) {
+                    currentPosition + 1
+                } else {
+                    0
+                }
+            }
+            playSong(playlist[currentPosition], playlist, currentPosition)
+        }
+    }
+    
+    fun seekTo(position: Long) {
+        exoPlayer?.seekTo(position)
+    }
+    
+    fun toggleShuffle() {
+        isShuffleEnabled = !isShuffleEnabled
+        onShuffleChangedCallback?.invoke(isShuffleEnabled)
+    }
+
+    fun toggleRepeat() {
+        repeatMode = when (repeatMode) {
+            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+            else -> Player.REPEAT_MODE_OFF
+        }
+        exoPlayer?.repeatMode = repeatMode
+        onRepeatModeChangedCallback?.invoke(repeatMode)
+    }
+    
+    fun getCurrentPosition(): Long = exoPlayer?.currentPosition ?: 0L
+    fun getDuration(): Long = exoPlayer?.duration ?: 0L
+    fun isPlaying(): Boolean = exoPlayer?.isPlaying ?: false
+    fun getCurrentSong(): Song? = currentSong
+    fun getShuffleEnabled(): Boolean = isShuffleEnabled
+    fun getRepeatMode(): Int = repeatMode
+
+    // Callback setters
+    fun setOnSongChangedCallback(callback: (Song?) -> Unit) {
+        onSongChangedCallback = callback
+    }
+
+    fun setOnPlayingStateChangedCallback(callback: (Boolean) -> Unit) {
+        onPlayingStateChangedCallback = callback
+    }
+
+    fun setOnProgressChangedCallback(callback: (Long, Long) -> Unit) {
+        onProgressChangedCallback = callback
+    }
+
+    fun setOnShuffleChangedCallback(callback: (Boolean) -> Unit) {
+        onShuffleChangedCallback = callback
+    }
+
+    fun setOnRepeatModeChangedCallback(callback: (Int) -> Unit) {
+        onRepeatModeChangedCallback = callback
+    }
+    
+    private fun startProgressUpdate() {
+        progressUpdateJob?.cancel()
+        progressUpdateJob = CoroutineScope(Dispatchers.Main).launch {
+            while (isActive && exoPlayer?.isPlaying == true) {
+                val current = getCurrentPosition()
+                val duration = getDuration()
+                onProgressChangedCallback?.invoke(current, duration)
+                delay(Constants.UPDATE_INTERVAL)
+            }
+        }
+    }
+    
+    private fun stopProgressUpdate() {
+        progressUpdateJob?.cancel()
+    }
+    
+    private fun updateNotification() {
+        currentSong?.let { song ->
+            val notification = notificationHelper.createNotification(
+                song = song,
+                isPlaying = isPlaying(),
+                playPauseIntent = createPendingIntent(Constants.ACTION_PLAY),
+                previousIntent = createPendingIntent(Constants.ACTION_PREVIOUS),
+                nextIntent = createPendingIntent(Constants.ACTION_NEXT)
+            )
+            startForeground(Constants.NOTIFICATION_ID, notification)
+        }
+    }
+    
+    private fun createPendingIntent(action: String): PendingIntent {
+        val intent = Intent(this, MusicService::class.java).apply {
+            this.action = action
+        }
+        return PendingIntent.getService(
+            this,
+            action.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        stopProgressUpdate()
+        exoPlayer?.release()
+        exoPlayer = null
     }
 }

@@ -1,6 +1,18 @@
-# Android Music Streaming Player
+# Music Player App
 
-A comprehensive Android music streaming application built with Kotlin using the MVP (Model-View-Presenter) architecture pattern. The app features online music streaming, background playback, and a modern UI designed entirely with XML layouts.
+Ứng dụng nghe nhạc Android được xây dựng với MVP pattern, Service và Notification.
+
+## Tính năng chính
+
+- ✅ Hiển thị danh sách bài hát
+- ✅ Phát nhạc khi click vào bài hát
+- ✅ Mini player ở màn hình chính
+- ✅ Màn hình player đầy đủ với các điều khiển
+- ✅ Service chạy nền để phát nhạc
+- ✅ Notification với điều khiển phát nhạc
+- ✅ Tìm kiếm bài hát
+- ✅ Shuffle và Repeat mode
+- ✅ Điều khiển Previous/Next
 
 ## 🏗️ Architecture
 
