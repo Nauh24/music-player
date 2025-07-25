@@ -6,10 +6,9 @@
 ![Kotlin](https://img.shields.io/badge/Language-Kotlin-blue.svg)
 ![MVP](https://img.shields.io/badge/Architecture-MVP-orange.svg)
 ![ExoPlayer](https://img.shields.io/badge/Audio-ExoPlayer-red.svg)
-![API](https://img.shields.io/badge/Min%20API-24-brightgreen.svg)
-![License](https://img.shields.io/badge/License-MIT-blue.svg)
 
-*A modern Android music player built with MVP architecture, ExoPlayer, and Material Design*
+
+*A modern Android music player built with MVP architecture and ExoPlayer*
 
 </div>
 
@@ -17,12 +16,11 @@
 
 - 🎵 **High-Quality Audio Streaming** - Powered by ExoPlayer for seamless playback
 - 🎨 **Material Design UI** - Clean, intuitive interface following Material Design guidelines
-- 🔍 **Smart Search** - Search songs by title, artist, or album
+- 🔍 **Search** - Search songs by title, artist, or album
 - 🎛️ **Full Playback Controls** - Play, pause, skip, seek, shuffle, and repeat
 - 📱 **Background Playback** - Continue listening while using other apps
 - 🔔 **Media Notifications** - Control playback from notification panel
-- 🎯 **MVP Architecture** - Clean, maintainable code structure
-- 🌐 **Network Streaming** - Stream music from online sources
+
 
 ## 🏗️ Architecture
 
@@ -65,25 +63,6 @@ app/src/main/java/com/nauh/musicplayer/
 - **UI Framework**: Android Views with XML layouts
 - **Design System**: Material Design Components
 
-### Key Dependencies
-```kotlin
-// Media playback
-implementation("androidx.media3:media3-exoplayer:1.2.1")
-implementation("androidx.media3:media3-ui:1.2.1")
-implementation("androidx.media3:media3-session:1.2.1")
-
-// Networking
-implementation("com.squareup.retrofit2:retrofit:2.9.0")
-implementation("com.squareup.retrofit2:converter-gson:2.9.0")
-
-// UI Components
-implementation("androidx.recyclerview:recyclerview:1.3.2")
-implementation("com.google.android.material:material:1.11.0")
-
-// Android Architecture Components
-implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
-implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.7.0")
-```
 
 ## 🚀 Getting Started
 
@@ -221,23 +200,6 @@ class MusicServiceConnection(private val context: Context) {
 }
 ```
 
-## 🔒 Permissions
-
-The app requires the following permissions:
-
-```xml
-<!-- Network access for streaming -->
-<uses-permission android:name="android.permission.INTERNET" />
-<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-
-<!-- Background playback -->
-<uses-permission android:name="android.permission.WAKE_LOCK" />
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-
-<!-- Notifications (Android 13+) -->
-<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-```
 
 ## 🐛 Troubleshooting
 
@@ -278,26 +240,12 @@ The app requires the following permissions:
 2. Verify NotificationChannel creation
 3. Check battery optimization settings
 
-### Debug Logging
-```kotlin
-// In MusicService
-Log.d("MusicService", "Playing song: ${song.title}")
-Log.d("ExoPlayer", "Player state: ${playbackState}")
-
-// In PlayerPresenter
-Log.d("PlayerPresenter", "Service connected: $isConnected")
-Log.d("PlayerPresenter", "Attempting to play playlist")
-
-// In MusicServiceConnection
-Log.d("MusicServiceConnection", "MediaController connected")
-```
 
 ## 
 ---
 
 <div align="center">
 
-**⭐ Star this repository if you found it helpful!**
 
 *Made with Nguyen Van Huan*
 
