@@ -134,6 +134,13 @@ class NotificationHelper(private val context: Context) {
     fun showNotification(notification: android.app.Notification) {
         notificationManager.notify(NOTIFICATION_ID, notification)
     }
+
+    /**
+     * Update the existing notification
+     */
+    fun updateNotification(notification: android.app.Notification) {
+        notificationManager.notify(NOTIFICATION_ID, notification)
+    }
     
     /**
      * Cancel the notification

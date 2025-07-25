@@ -152,6 +152,7 @@ class PlayerActivity : AppCompatActivity(), PlayerContract.View {
     private fun initializePresenter() {
         presenter = PlayerPresenter()
         presenter.attachView(this)
+        presenter.initializeMusicService(this)
     }
 
     // MVP View Interface Implementation
